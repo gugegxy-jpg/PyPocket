@@ -212,7 +212,7 @@ private struct ImportView: View {
                             Text("支持 .py 或 ZIP，最多 50 MB。ZIP 内的纯 Python 依赖可随项目一并导入。")
                                 .font(.subheadline).foregroundStyle(.secondary)
                             Button("选择文件", systemImage: "doc.badge.plus") { showFiles = true }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.borderedProminent).disabled(model.importing)
                         }
                         GlassPanel {
                             Label("从链接下载", systemImage: "link").font(.title3.bold())
@@ -222,8 +222,15 @@ private struct ImportView: View {
                             Text("请使用 .py / .zip 的原始 HTTPS 文件地址。下载完成后不会自动运行。")
                                 .font(.caption).foregroundStyle(.secondary)
                             Button("下载并导入", systemImage: "arrow.down.circle") {
-                                model.importRemote(link); dismiss()
-                            }.buttonStyle(.borderedProminent).disabled(link.isEmpty)
+                                model.importRemote(link)
+                            }.buttonStyle(.borderedProminent).disabled(link.isEmpty || model.importing)
+                        }
+                        if let message = model.errorMessage {
+                            Text(message)
+                                .font(.footnote).foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
                         }
                     }.padding(20)
                 }
@@ -232,10 +239,11 @@ private struct ImportView: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
             .fileImporter(isPresented: $showFiles, allowedContentTypes: [UTType(filenameExtension: "py") ?? .plainText, .zip]) { result in
                 switch result {
-                case .success(let url): model.importLocal(url); dismiss()
-                case .failure(let error): model.errorMessage = error.localizedDescription
+                case .success(let url): model.importLocal(url)
+                case .failure(let error): model.importFailed("无法读取所选文件：\(error.localizedDescription)")
                 }
             }
+            .onChange(of: model.selectedID) { _, _ in dismiss() }
         }.presentationDetents([.large])
     }
 }

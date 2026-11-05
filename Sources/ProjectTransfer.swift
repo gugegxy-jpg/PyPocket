@@ -56,9 +56,12 @@ enum ProjectTransfer {
             let session = URLSession(configuration: config)
             defer { session.invalidateAndCancel() }
             let (bytes, response) = try await session.bytes(from: url)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+            guard let http = response as? HTTPURLResponse else {
+                throw PocketError(message: "服务器没有返回 HTTP 响应。")
+            }
+            guard (200..<300).contains(http.statusCode),
                   response.url?.scheme?.lowercased() == "https" else {
-                throw PocketError(message: "下载失败，请使用原始文件链接而不是网页地址。")
+                throw PocketError(message: "下载失败（HTTP \(http.statusCode)）\(httpStatusHint(http.statusCode))。请使用 .py / .zip 的原始文件链接，而不是网页或跳转地址。")
             }
             guard response.expectedContentLength <= Int64(limit) else {
                 throw PocketError(message: "远程文件超过 50 MB 上限。")
@@ -82,7 +85,38 @@ enum ProjectTransfer {
             return output
         } catch {
             cleanup(output)
+            if let pocket = error as? PocketError { throw pocket }
+            if let urlError = error as? URLError { throw PocketError(message: networkHint(urlError)) }
             throw error
+        }
+    }
+
+    private static func httpStatusHint(_ code: Int) -> String {
+        switch code {
+        case 401, 403: return "：服务器拒绝访问"
+        case 404, 410: return "：文件不存在或地址已失效"
+        case 429: return "：请求过于频繁"
+        case 500...599: return "：服务器暂时出错"
+        default: return ""
+        }
+    }
+
+    private static func networkHint(_ error: URLError) -> String {
+        switch error.code {
+        case .cannotFindHost, .cannotConnectToHost:
+            return "下载失败：无法解析或连接服务器，请检查域名和网络。"
+        case .timedOut:
+            return "下载失败：连接或传输超时，服务器响应过慢。"
+        case .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff:
+            return "下载失败：设备当前没有可用的网络连接。"
+        case .secureConnectionFailed, .serverCertificateUntrusted, .clientCertificateRejected:
+            return "下载失败：HTTPS 证书验证未通过，服务端证书无效或不受信任。"
+        case .cancelled:
+            return "下载已取消。"
+        case .networkConnectionLost:
+            return "下载失败：传输中途网络断开。"
+        default:
+            return "下载失败（错误码 \(error.code.rawValue)）：\(error.localizedDescription)"
         }
     }
 

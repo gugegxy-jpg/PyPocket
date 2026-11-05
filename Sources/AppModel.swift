@@ -128,7 +128,7 @@ final class AppModel: ObservableObject {
     }
 
     func importLocal(_ url: URL, name: String? = nil) {
-        guard !busy else { errorMessage = "请先停止当前任务再导入。"; return }
+        guard !busy else { importFailed("请先停止当前任务再导入。"); return }
         importing = true
         Task {
             defer { importing = false }
@@ -136,24 +136,31 @@ final class AppModel: ObservableObject {
                 let staged = try await ProjectTransfer.local(url)
                 defer { ProjectTransfer.cleanup(staged) }
                 try await finishImport(staged, name: name ?? url.deletingPathExtension().lastPathComponent)
-            } catch { errorMessage = error.localizedDescription }
+            } catch { importFailed("本地导入失败：\(error.localizedDescription)") }
         }
     }
 
     func importRemote(_ text: String) {
-        guard !busy else { errorMessage = "请先停止当前任务再导入。"; return }
+        guard !busy else { importFailed("请先停止当前任务再导入。"); return }
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            errorMessage = "请输入有效文件链接。"; return
+            importFailed("请输入有效文件链接。"); return
         }
         importing = true
+        console.append("[导入] 开始下载 \(url.absoluteString)\n")
         Task {
             defer { importing = false }
             do {
                 let staged = try await ProjectTransfer.remote(url)
                 defer { ProjectTransfer.cleanup(staged) }
                 try await finishImport(staged, name: url.deletingPathExtension().lastPathComponent)
-            } catch { errorMessage = error.localizedDescription }
+            } catch { importFailed("远程导入失败：\(error.localizedDescription)") }
         }
+    }
+
+    /// 导入失败要同时写控制台并弹提示：控制台是用户排查导入问题的主入口。
+    func importFailed(_ message: String) {
+        console.append("[导入失败] \(message)\n")
+        errorMessage = message
     }
 
     private func finishImport(_ staged: URL, name: String) async throws {
