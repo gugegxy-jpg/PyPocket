@@ -123,8 +123,9 @@ private struct WorkspaceView: View {
         }
         .navigationTitle("PyPocket").navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("导入", systemImage: "plus") { showImport = true }.disabled(model.busy) }
-        .confirmationDialog("运行这个项目？", isPresented: $confirmRun, titleVisibility: .visible) {
-            Button("我信任此代码，开始运行") { model.runSelected() }
+        // 单一确认场景用居中 alert；confirmationDialog 在 iOS 26 会以浮动卡片飘在屏幕上部。
+        .alert("运行这个项目？", isPresented: $confirmRun) {
+            Button("我信任此代码，开始运行", role: .destructive) { model.runSelected() }
             Button("取消", role: .cancel) {}
         } message: {
             Text("脚本可访问 App 内的项目文件和网络。导入不会自动安装依赖或执行代码。")
