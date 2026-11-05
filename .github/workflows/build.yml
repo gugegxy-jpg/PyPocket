@@ -1,0 +1,101 @@
+# GitHub 云端构建：macOS runner 上用 Xcode 打包未签名 IPA，并跑 Python 单元测试
+# 用法：推送到 GitHub 后，Actions → Build PyPocket → Run workflow；
+#       跑完在 Artifacts 下载 PyPocket-ipa（未签名，需重签后安装真机）
+name: Build PyPocket
+
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - "README.md"
+      - ".gitignore"
+      - "LICENSE"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-pypocket-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      # 纯逻辑测试：导入边界与执行器调度，不依赖 Xcode
+      - name: Run Python unit tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Build unsigned IPA
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+
+      # 防「编译成功但运行时没进包」：直接检查 IPA 内的关键文件
+      - name: Verify IPA contents
+        run: |
+          python3 - <<'PY'
+          import sys, zipfile
+          names = zipfile.ZipFile("build/PyPocket.ipa").namelist()
+          prefix = "Payload/PyPocket.app/"
+          required = [
+              prefix + "python/lib/python3.15/encodings/__init__.py",
+              prefix + "python/lib/python3.15/lib-dynload/",
+              prefix + "cacert.pem",
+              prefix + "runtime-licenses.txt",
+              prefix + "Frameworks/Python.framework/Python",
+              prefix + "PrivacyInfo.xcprivacy",
+          ]
+          missing = [item for item in required
+                     if not any(name.startswith(item) for name in names)]
+          extensions = sum(1 for name in names
+                           if name.startswith(prefix + "Frameworks/pypocket_")
+                           and name.endswith(".framework/Info.plist"))
+          print(f"原生扩展 framework 数量：{extensions}")
+          if missing or extensions == 0:
+              print("缺少关键文件：", *missing, sep="\n  ", file=sys.stderr)
+              sys.exit(1)
+          print("IPA 内容检查通过")
+          PY
+
+      - name: Pack and report size
+        run: |
+          ls -lh build/PyPocket.ipa
+          unzip -l build/PyPocket.ipa | tail -n 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PyPocket-ipa
+          path: build/PyPocket.ipa
+          if-no-files-found: error
+          retention-days: 90
+
+      # Release asset 匿名可下载；Artifact 必须登录
+      - name: Publish IPA as release asset
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: build-${{ github.run_number }}
+        run: |
+          if [ -f build/PyPocket.ipa ]; then
+            gh release create "$TAG" build/PyPocket.ipa \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --notes "Actions 自动构建：run ${{ github.run_number }} / commit ${{ github.sha }}（未签名，请重签后安装）" \
+              --latest=false
+          else
+            echo "没有可发布的产物，跳过 Release"
+          fi
