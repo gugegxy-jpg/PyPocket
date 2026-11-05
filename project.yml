@@ -19,7 +19,10 @@ targets:
     platform: iOS
     sources:
       - Sources
-      - Resources
+      # runtime / Examples 由 scripts/embed_runtime.py 原样拷贝（保留目录结构），
+      # 这里只放必须位于 .app 根目录的资源。
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     dependencies:
       - framework: Vendor/Python.xcframework
     settings:

@@ -56,6 +56,9 @@ jobs:
               prefix + "python/lib/python3.15/lib-dynload/",
               prefix + "cacert.pem",
               prefix + "runtime-licenses.txt",
+              prefix + "runtime/project_io.py",
+              prefix + "runtime/pypocket_host.py",
+              prefix + "Examples/hello.py",
               prefix + "Frameworks/Python.framework/Python",
               prefix + "PrivacyInfo.xcprivacy",
           ]

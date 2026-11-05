@@ -48,6 +48,12 @@ def embed(app: Path, platform: str, arch: str, native_tools: bool = True) -> Non
     if destination.exists():
         shutil.rmtree(destination)
     shutil.copytree(pure, destination, ignore=ignored)
+    # Xcode 会拍平普通资源组的目录结构；宿主 Python 脚本和示例改为原样整目录拷贝。
+    for name in ("runtime", "Examples"):
+        target = app / name
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(ROOT / "Resources" / name, target)
     dynamic = destination / "lib-dynload"
     dynamic.mkdir()
     frameworks = app / "Frameworks"
