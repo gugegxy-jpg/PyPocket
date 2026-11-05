@@ -73,12 +73,12 @@ def execute_json(request: str) -> str:
     sys.modules["pypocket"] = api
 
     def trace(frame, event, arg):
-        # 不跟踪宿主和 threading 内部清理，避免在恢复现场期间反复抛异常。
-        if frame.f_code.co_filename.startswith(prefix):
-            if native.cancelled():
-                raise ScriptStopped()
-            return trace
-        return None
+        # 全局检查取消标记：服务型脚本（如 http.server.serve_forever）主循环在标准库内，
+        # 只按项目路径过滤会让主线程永远等不到停止信号。ScriptStopped 是 BaseException，
+        # 不会被脚本的 except Exception 吞掉。
+        if native.cancelled():
+            raise ScriptStopped()
+        return trace
 
     def sleep(seconds):
         if seconds < 0:
@@ -124,16 +124,20 @@ def execute_json(request: str) -> str:
         sys.settrace(None)
         try:
             announced = False
+            deadline = time.monotonic() + 5.0
             while True:
                 remaining = [thread for thread in threading.enumerate()
                              if thread not in old_threads and thread.is_alive()]
                 if not remaining:
                     break
                 if not announced:
-                    native.write("[等待] 项目线程仍在运行；停止按钮会请求协作退出。阻塞原生调用可能需要重新打开 App。\n")
+                    native.write("[等待] 项目线程正在退出…\n")
                     announced = True
                 for thread in remaining:
                     thread.join(timeout=0.1)
+                if time.monotonic() >= deadline:
+                    native.write(f"[停止] 仍有 {len(remaining)} 个线程未退出（卡在原生调用或长连接），已不再等待；\n端口监听与定时器可能残留，完全释放请重新打开 App。\n")
+                    break
         finally:
             threading.settrace(old_thread_trace)
             threading.excepthook = old_excepthook

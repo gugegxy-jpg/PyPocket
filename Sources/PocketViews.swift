@@ -253,11 +253,23 @@ struct ConsoleView: View {
     var body: some View {
         ZStack {
             PocketBackdrop()
-            ScrollView([.vertical, .horizontal]) {
-                Text(console.text.isEmpty ? "输出会出现在这里。\n导入或运行一个项目开始。" :
-                     console.text.components(separatedBy: "\n").suffix(240).joined(separator: "\n"))
-                    .font(.system(size: 12, design: .monospaced))
-                    .textSelection(.enabled).frame(minWidth: 280, alignment: .topLeading).padding(20)
+            ScrollView(.vertical) {
+                if console.text.isEmpty {
+                    Text("输出会出现在这里。\n导入或运行一个项目开始。")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .topLeading).padding(20)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(console.text.components(separatedBy: "\n").suffix(240).enumerated()), id: \.offset) { _, line in
+                            Text(line.isEmpty ? " " : line)
+                                .font(.system(size: 12, design: .monospaced))
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }.padding(20)
+                }
             }
         }
         .navigationTitle("控制台")
@@ -269,7 +281,7 @@ struct ConsoleView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Text("显示最近 240 行 · 文件日志自动轮转，最多保留两份")
+            Text("长按任意一行可选中并复制片段 · 显示最近 240 行，长行自动换行")
                 .font(.caption2).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.thinMaterial)
         }
     }
