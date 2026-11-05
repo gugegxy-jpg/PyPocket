@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+Vendor/
+build/
+PyPocket.xcodeproj/
+.DS_Store
+*.ipa
+*.log
