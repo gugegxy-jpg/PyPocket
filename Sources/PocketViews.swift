@@ -290,6 +290,7 @@ struct ConsoleView: View {
 private struct PreferencesView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var audio: BackgroundAudio
+    @State private var cacheSummary = "计算中…"
     var body: some View {
         ZStack {
             PocketBackdrop()
@@ -303,6 +304,15 @@ private struct PreferencesView: View {
                         Toggle("前台保持屏幕常亮", isOn: $model.preventSleep)
                         Text("仅在任务运行时生效。静音音频会增加耗电，也可能被来电、系统调度或强制退出中断；不保证永久后台运行。")
                             .font(.caption).foregroundStyle(.secondary)
+                    }
+                    GlassPanel {
+                        Label("存储维护", systemImage: "paintbrush").font(.headline)
+                        Text(cacheSummary).font(.caption).foregroundStyle(.secondary)
+                        Button("清理导入临时文件与日志", systemImage: "trash") {
+                            let freed = model.clearCaches()
+                            refreshCacheSummary(freed: freed)
+                        }
+                        .disabled(model.busy)
                     }
                     GlassPanel {
                         Label("运行边界", systemImage: "checkmark.shield").font(.headline)
@@ -325,6 +335,18 @@ private struct PreferencesView: View {
                 }.padding(20).frame(maxWidth: 740).frame(maxWidth: .infinity)
             }
         }.navigationTitle("设置")
+        .onAppear { refreshCacheSummary(freed: nil) }
+    }
+
+    private func refreshCacheSummary(freed: Int64?) {
+        if let freed {
+            cacheSummary = "已清理 \(ByteCountFormatter.string(fromByteCount: freed, countStyle: .file))。项目与脚本数据未被改动。"
+            return
+        }
+        let sizes = model.cacheSizes()
+        let imports = ByteCountFormatter.string(fromByteCount: sizes.imports, countStyle: .file)
+        let logs = ByteCountFormatter.string(fromByteCount: sizes.logs, countStyle: .file)
+        cacheSummary = "导入临时文件 \(imports) · 日志 \(logs)。项目与脚本数据不会被清理。"
     }
 }
 

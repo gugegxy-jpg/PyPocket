@@ -157,6 +157,59 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: 存储维护
+
+    private var logsDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PyPocket/Logs", isDirectory: true)
+    }
+
+    func cacheSizes() -> (imports: Int64, logs: Int64) {
+        let manager = FileManager.default
+        var imports: Int64 = 0
+        if let entries = try? manager.contentsOfDirectory(at: manager.temporaryDirectory, includingPropertiesForKeys: nil) {
+            for entry in entries where entry.lastPathComponent.hasPrefix("pypocket-import-") {
+                imports += directorySize(entry)
+            }
+        }
+        var logs: Int64 = 0
+        if let entries = try? manager.contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: nil) {
+            for entry in entries where entry.lastPathComponent.hasSuffix(".log") {
+                if let size = try? entry.resourceValues(forKeys: [.fileSizeKey]).fileSize { logs += Int64(size) }
+            }
+        }
+        return (imports, logs)
+    }
+
+    private func directorySize(_ url: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            if let size = try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize { total += Int64(size) }
+        }
+        return total
+    }
+
+    /// 清理导入临时残留与日志；当前日志经 ConsoleStore 原子清空，避免与写入竞争；项目文件不动。
+    @discardableResult
+    func clearCaches() -> Int64 {
+        let manager = FileManager.default
+        let (imports, logs) = cacheSizes()
+        if let entries = try? manager.contentsOfDirectory(at: manager.temporaryDirectory, includingPropertiesForKeys: nil) {
+            for entry in entries where entry.lastPathComponent.hasPrefix("pypocket-import-") {
+                try? manager.removeItem(at: entry)
+            }
+        }
+        if let entries = try? manager.contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: nil) {
+            for entry in entries where entry.lastPathComponent == "console.previous.log" {
+                try? manager.removeItem(at: entry)
+            }
+        }
+        console.clear()
+        console.append("[维护] 已清理导入临时文件与日志（\(ByteCountFormatter.string(fromByteCount: imports + logs, countStyle: .file))）。项目文件未受影响。\n")
+        return imports + logs
+    }
+
     /// 导入失败要同时写控制台并弹提示：控制台是用户排查导入问题的主入口。
     func importFailed(_ message: String) {
         console.append("[导入失败] \(message)\n")
