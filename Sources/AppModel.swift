@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 import SwiftUI
 import UIKit
@@ -29,6 +30,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var startedAt: Date?
     @Published private(set) var importing = false
     @Published var errorMessage: String?
+    @Published var pendingTrust: ScriptProject?
     @Published var health = "尚未检查"
     @Published var backgroundEnabled: Bool {
         didSet { UserDefaults.standard.set(backgroundEnabled, forKey: "backgroundEnabled"); reconcile() }
@@ -123,6 +125,7 @@ final class AppModel: ObservableObject {
         guard !busy, projects.contains(where: { $0.id == project.id }), UUID(uuidString: project.id) != nil else { return }
         do {
             try FileManager.default.removeItem(at: projectsURL.appendingPathComponent(project.id))
+            forgetTrust(project.id)
             reload()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -236,6 +239,48 @@ final class AppModel: ObservableObject {
             errorMessage = "安装包缺少示例脚本。"; return
         }
         importLocal(url, name: name == "hello" ? "你好，Python" : "本地 HTTP 服务")
+    }
+
+    // MARK: 信任记忆
+
+    /// 指纹覆盖入口代码与启动参数：代码或参数变化后需要重新确认。
+    private func trustFingerprint(_ project: ScriptProject) -> String? {
+        guard let url = try? entryURL(project), let code = try? Data(contentsOf: url) else { return nil }
+        var hasher = SHA256()
+        hasher.update(data: code)
+        hasher.update(data: Data(project.entry.utf8))
+        hasher.update(data: Data(project.arguments.utf8))
+        hasher.update(data: Data(project.environment.utf8))
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    func isTrusted(_ project: ScriptProject) -> Bool {
+        let map = UserDefaults.standard.dictionary(forKey: "trustedProjects") as? [String: String] ?? [:]
+        return map[project.id] != nil && map[project.id] == trustFingerprint(project)
+    }
+
+    /// 运行入口：已信任且代码/参数未变则直接运行，否则弹出首次确认。
+    func requestRun() {
+        guard !busy, let project = selected else { return }
+        if isTrusted(project) { runSelected() } else { pendingTrust = project }
+    }
+
+    func confirmTrustAndRun() {
+        guard let project = pendingTrust else { return }
+        pendingTrust = nil
+        if let fingerprint = trustFingerprint(project) {
+            var map = UserDefaults.standard.dictionary(forKey: "trustedProjects") as? [String: String] ?? [:]
+            map[project.id] = fingerprint
+            UserDefaults.standard.set(map, forKey: "trustedProjects")
+        }
+        runSelected()
+    }
+
+    private func forgetTrust(_ projectID: String) {
+        var map = UserDefaults.standard.dictionary(forKey: "trustedProjects") as? [String: String] ?? [:]
+        if map.removeValue(forKey: projectID) != nil {
+            UserDefaults.standard.set(map, forKey: "trustedProjects")
+        }
     }
 
     func runSelected() {

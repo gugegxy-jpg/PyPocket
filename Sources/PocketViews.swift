@@ -29,7 +29,6 @@ struct PocketRootView: View {
 private struct WorkspaceView: View {
     @EnvironmentObject private var model: AppModel
     @Binding var showImport: Bool
-    @State private var confirmRun = false
     @State private var showPreview = false
     @State private var editing: ScriptProject?
 
@@ -75,7 +74,7 @@ private struct WorkspaceView: View {
                             }
                             RunButton(active: model.runState.active,
                                       disabled: model.importing || model.runState == .stopping) {
-                                if model.runState.active { model.stop() } else { confirmRun = true }
+                                if model.runState.active { model.stop() } else { model.requestRun() }
                             }
                             Button { editing = project } label: {
                                 Label("入口、参数与源码", systemImage: "slider.horizontal.3")
@@ -124,11 +123,13 @@ private struct WorkspaceView: View {
         .navigationTitle("PyPocket").navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("导入", systemImage: "plus") { showImport = true }.disabled(model.busy) }
         // 单一确认场景用居中 alert；confirmationDialog 在 iOS 26 会以浮动卡片飘在屏幕上部。
-        .alert("运行这个项目？", isPresented: $confirmRun) {
-            Button("我信任此代码，开始运行", role: .destructive) { model.runSelected() }
+        .alert("首次运行：\(model.pendingTrust?.name ?? "")", isPresented: Binding(
+            get: { model.pendingTrust != nil },
+            set: { if !$0 { model.pendingTrust = nil } })) {
+            Button("我信任此代码，开始运行", role: .destructive) { model.confirmTrustAndRun() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("脚本可访问 App 内的项目文件和网络。导入不会自动安装依赖或执行代码。")
+            Text("脚本可访问 App 内的项目文件和网络。导入不会自动安装依赖或执行代码。确认后记住此版本；代码或启动参数变更后会再次询问。")
         }
         .sheet(item: $editing) { ProjectEditor(project: $0) }
         .sheet(isPresented: $showPreview) {
