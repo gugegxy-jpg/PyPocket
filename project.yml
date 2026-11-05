@@ -19,6 +19,7 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - Assets.xcassets
       # runtime / Examples 由 scripts/embed_runtime.py 原样拷贝（保留目录结构），
       # 这里只放必须位于 .app 根目录的资源。
       - path: Resources/PrivacyInfo.xcprivacy
@@ -30,6 +31,7 @@ targets:
         PRODUCT_NAME: PyPocket
         INFOPLIST_FILE: Info.plist
         SWIFT_OBJC_BRIDGING_HEADER: Sources/PyPocket-Bridging-Header.h
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
         OTHER_LDFLAGS: "-ObjC"
         CODE_SIGNING_ALLOWED: NO
