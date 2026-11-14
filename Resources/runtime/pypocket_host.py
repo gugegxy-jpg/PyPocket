@@ -105,6 +105,12 @@ def execute_json(request: str) -> str:
         os.environ.update(environment)
         time.sleep = sleep
         threading.excepthook = thread_exception
+        # 外部设备高并发访问本机服务时，脚本（如 ThreadingHTTPServer）每请求开一个线程；
+        # 默认 8 MB 栈预留会迅速触发 iOS 内存杀进程（闪退）。降到 512 KB 足够解释器递归使用。
+        try:
+            threading.stack_size(512 * 1024)
+        except (ValueError, RuntimeError):
+            pass
         threading.settrace(trace)
         sys.settrace(trace)
         print(f"[运行] {spec['entry']}\n[Python] {sys.version.split()[0]}")

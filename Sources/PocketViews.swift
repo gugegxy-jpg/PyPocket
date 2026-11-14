@@ -239,7 +239,9 @@ private struct ImportView: View {
             }
             .navigationTitle("添加项目").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
-            .fileImporter(isPresented: $showFiles, allowedContentTypes: [UTType(filenameExtension: "py") ?? .plainText, .zip]) { result in
+            // 不按 UTType 过滤：iOS 对 .py 的类型映射不全会让文件在选单里变灰。
+            // 允许全选，导入端已有扩展名与内容校验。
+            .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item]) { result in
                 switch result {
                 case .success(let url): model.importLocal(url)
                 case .failure(let error): model.importFailed("无法读取所选文件：\(error.localizedDescription)")
