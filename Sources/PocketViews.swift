@@ -239,9 +239,9 @@ private struct ImportView: View {
             }
             .navigationTitle("添加项目").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
-            // 不按 UTType 过滤：iOS 对 .py 的类型映射不全会让文件在选单里变灰。
-            // 允许全选，导入端已有扩展名与内容校验。
-            .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item]) { result in
+            // 用 .data（public.data）做"任意文件"过滤：.py 专用 UTI 映射不全、
+            // .item 等抽象 UTI 会让选择器点击无响应；类型校验交给导入端。
+            .fileImporter(isPresented: $showFiles, allowedContentTypes: [.data]) { result in
                 switch result {
                 case .success(let url): model.importLocal(url)
                 case .failure(let error): model.importFailed("无法读取所选文件：\(error.localizedDescription)")
