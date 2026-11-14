@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 import WebKit
 
 struct PocketRootView: View {
@@ -239,16 +240,38 @@ private struct ImportView: View {
             }
             .navigationTitle("添加项目").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
-            // 用 .data（public.data）做"任意文件"过滤：.py 专用 UTI 映射不全、
-            // .item 等抽象 UTI 会让选择器点击无响应；类型校验交给导入端。
-            .fileImporter(isPresented: $showFiles, allowedContentTypes: [.data]) { result in
-                switch result {
-                case .success(let url): model.importLocal(url)
-                case .failure(let error): model.importFailed("无法读取所选文件：\(error.localizedDescription)")
-                }
+            // SwiftUI fileImporter 在部分 iOS 版本上点击文件无响应，改用系统
+            // UIDocumentPickerViewController；asCopy 让系统拷入临时目录，无需安全作用域。
+            .sheet(isPresented: $showFiles) {
+                DocumentPicker { url in model.importLocal(url) }
             }
             .onChange(of: model.selectedID) { _, _ in dismiss() }
         }.presentationDetents([.large])
+    }
+}
+
+/// 系统文档选择器包装：public.data 过滤即“任意文件”，扩展名校验由导入端完成。
+private struct DocumentPicker: UIViewControllerRepresentable {
+    let onPick: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            if let url = urls.first { onPick(url) }
+        }
     }
 }
 
